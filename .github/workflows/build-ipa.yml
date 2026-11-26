@@ -1,0 +1,55 @@
+name: Build iOS 9 CassettePlayer IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  build-ipa:
+    # Note: Building 32-bit armv7 for iOS 9 requires Xcode 11.x–13.x (Xcode 14+ dropped armv7).
+    # On GitHub Actions, macos-12 with Xcode 13.4.1 supports armv7 + iOS 9.0 deployment target.
+    runs-on: macos-12
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Select Xcode 13.4.1 (supports 32-bit armv7 & iOS 9)
+        run: sudo xcode-select -s /Applications/Xcode_13.4.1.app/Contents/Developer
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode Project
+        working-directory: CassettePlayer
+        run: xcodegen generate
+
+      - name: Build Unsigned Release App (armv7 + arm64)
+        working-directory: CassettePlayer
+        run: |
+          xcodebuild -project CassettePlayer.xcodeproj \
+            -scheme CassettePlayer \
+            -configuration Release \
+            -sdk iphoneos \
+            ARCHS="armv7 armv7s arm64" \
+            ONLY_ACTIVE_ARCH=NO \
+            IPHONEOS_DEPLOYMENT_TARGET=9.0 \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            CONFIGURATION_BUILD_DIR=build/Release-iphoneos \
+            build
+
+      - name: Package Unsigned IPA for Sideloadly / AppSync
+        working-directory: CassettePlayer
+        run: |
+          mkdir -p build/Payload
+          cp -R build/Release-iphoneos/CassettePlayer.app build/Payload/
+          cd build
+          zip -r -y CassettePlayer-iOS9.ipa Payload
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CassettePlayer-iOS9-IPA
+          path: CassettePlayer/build/CassettePlayer-iOS9.ipa
